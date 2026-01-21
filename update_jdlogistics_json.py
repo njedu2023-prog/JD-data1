@@ -27,10 +27,9 @@ def expected_trade_date_bj(now_bj: datetime.datetime) -> str:
     - 工作日：
       - 17:30（北京时间）之后：期望今天
       - 17:30 之前：期望上一个工作日
-    说明：不处理港股节假日（如遇节假日，Tushare会自然回退到最近交易日，我们会打印提示但不会误写）。
     """
     today = now_bj.date()
-    if today.weekday() >= 5:  # 周末
+    if today.weekday() >= 5:
         return prev_weekday(today).strftime("%Y%m%d")
 
     cutoff = now_bj.replace(hour=17, minute=30, second=0, microsecond=0)
@@ -70,7 +69,6 @@ def fetch_hk_daily_latest(pro, ts_code: str, days_back: int = 30):
         print("[WARN] Tushare returned empty dataframe.")
         return None, None
 
-    # 确保 trade_date 是字符串
     df["trade_date"] = df["trade_date"].astype(str)
     df = df.sort_values("trade_date")
 
@@ -113,9 +111,10 @@ def row_to_json(latest, ts_code: str):
 
 
 def main():
-    token = os.getenv("HK_API_TOKEN")
+    # ✅ 关键修改：使用新的 Token 名
+    token = os.getenv("HK_MARKET_API_TOKEN")
     if not token:
-        raise RuntimeError("Missing HK_API_TOKEN in environment")
+        raise RuntimeError("Missing HK_MARKET_API_TOKEN in environment")
 
     ts.set_token(token)
     pro = ts.pro_api()
@@ -132,23 +131,20 @@ def main():
     latest_td = str(latest["trade_date"])
     print(f"[INFO] tushare_latest_trade_date={latest_td}")
 
-    # 关键：检测是否已更新到“应当的交易日”
-    force = os.getenv("FORCE_UPDATE", "").strip() in ("1", "true", "TRUE", "yes", "YES")
+    force = os.getenv("FORCE_UPDATE", "").strip().lower() in ("1", "true", "yes")
     if (latest_td < expected_td) and (not force):
         print("[INFO] Tushare NOT updated to expected trade_date yet.")
-        print(f"[INFO] latest_td={latest_td} < expected_td={expected_td} -> skip writing JSON (no commit).")
+        print(f"[INFO] latest_td={latest_td} < expected_td={expected_td} -> skip writing JSON.")
         return
 
-    # 如果 Tushare 给的数据“超过 expected”（例如节假日判断不准/或时区差异），也允许写，但会提示
     if latest_td > expected_td:
-        print("[WARN] latest_td is later than expected_td (holiday/time assumption). Proceed to write anyway.")
+        print("[WARN] latest_td later than expected_td, proceed anyway.")
 
     data = row_to_json(latest, TS_CODE)
 
-    # 如果文件里已经是同一天的数据，就不重复写（减少无意义 commit）
     existing_td = load_existing_date()
     if existing_td == latest_td and not force:
-        print(f"[INFO] Output already at trade_date={latest_td}. No changes. Exit.")
+        print(f"[INFO] Output already at trade_date={latest_td}. No changes.")
         return
 
     with open(OUT_FILE, "w", encoding="utf-8") as f:
