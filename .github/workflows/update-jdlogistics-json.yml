@@ -2,8 +2,8 @@ name: Update JD Logistics JSON
 
 on:
   schedule:
-    - cron: '30 8 * * 1-5'  # 每天北京时间 16:30 执行（UTC 08:30）
-  workflow_dispatch:        # 允许手动 Run workflow 立即执行
+    - cron: '30 8 * * 1-5'  # 北京时间 16:30（UTC 08:30）
+  workflow_dispatch:
 
 concurrency:
   group: update-jdlogistics-json
@@ -12,11 +12,12 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # 关键：需要完整历史，rebase 才不会出问题
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -28,7 +29,7 @@ jobs:
 
       - name: Run update script
         env:
-          HK_API_TOKEN: ${{ secrets.HK_API_TOKEN }}
+          HK_MARKET_API_TOKEN: ${{ secrets.HK_MARKET_API_TOKEN }}
         run: python update_jdlogistics_json.py
 
       - name: Commit and push changes
@@ -39,14 +40,11 @@ jobs:
 
           git add jd-logistics-latest.json
 
-          # 如果文件没变化，就不提交不推送
           if git diff --cached --quiet; then
             echo "No changes to commit"
             exit 0
           fi
 
           git commit -m "Update JD Logistics JSON"
-
-          # 关键：先同步远端最新，再推送，解决 rejected (fetch first)
           git pull --rebase origin main
           git push origin main
